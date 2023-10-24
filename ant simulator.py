@@ -12,8 +12,9 @@ font = pygame.font.SysFont(None, 36)
 antNum = 2
 boardSize = np.array([20, 8])
 cellSize = np.array([80, 80])
-headingWeight = 0.6
+headingWeight = 0.7
 pullWeight = 1 - headingWeight
+quitChance = 1
 
 def normalize(vector, normTo):
     vector /= np.linalg.norm(vector)
@@ -67,7 +68,7 @@ class Board:
         for row in self.board:
             for cell in row:
                 for pheremone in cell.pheremones:
-                    pygame.draw.circle(self.screen, (122, 235, 143), (pheremone[0], pheremone[1]), math.cbrt(pheremone[4])/5)
+                    pygame.draw.circle(self.screen, (122, 235, 143), (pheremone[0], pheremone[1]), math.sqrt(pheremone[4])/8)
 
         for food in self.foodInfo:
             pygame.draw.circle(self.screen, (52, 229, 235), (food[0], food[1]), food[2]*0.9+8)
@@ -105,14 +106,11 @@ class Board:
         for ant in self.ants:
             ant.pheremones = np.array(ant.pheremones)
             ant.pheremones[:, 4] = self.calculatePathScore(ant)
-            for pheremone in ant.pheremones:
-                self.board[pheremone[3].astype(int)][pheremone[2].astype(int)].pheremones.append(pheremone)
-
+            if ant.pheremones[0][4] != 0:
+                for pheremone in ant.pheremones:
+                    self.board[pheremone[3].astype(int)][pheremone[2].astype(int)].pheremones.append(pheremone)
 
         self.ants = []#Clear ants
-
-
-        pass
 
 class Ant:
     def __init__(self, position, board, num, deltaT, foodSpawn):
@@ -134,6 +132,7 @@ class Ant:
         self.heading = np.array([random.uniform(-1, 1), random.uniform(-1, 1)])
 
     def foodMovement(self):
+        global quitChance
         for food in self.cell.food:
             for visitedFood in self.foodsVisited:
                 if np.all(food==visitedFood):
@@ -143,7 +142,7 @@ class Ant:
             self.position[0] = food[0]
             self.position[1] = food[1]
             self.foodsVisited.append(food)
-            if random.random() < 0.5:
+            if random.random() < quitChance:
                 self.board.frozenAnts.append(self)
                 self.board.ants.remove(self)
 
@@ -164,7 +163,7 @@ class Ant:
                     relativePheremonePosition = pheremone[0:2] - self.position
                     dotProduct = np.dot(relativePheremonePosition, self.heading)
                     if dotProduct > 0 and np.linalg.norm(relativePheremonePosition) < 30:
-                        pulls.append((relativePheremonePosition)*(pheremone[4]))
+                        pulls.append((relativePheremonePosition)*(pheremone[4]**3))
         pulls.append(self.heading)
         pulls = np.array(pulls) #Freezing goes br
 
@@ -256,6 +255,12 @@ while True:
         pygame.draw.polygon(screen, (237, 100, 113), [(boardSize[0]*cellSize[0], 0), (boardSize[0]*cellSize[0] - 240, 0), (boardSize[0]*cellSize[0] - 200, 40), (boardSize[0]*cellSize[0], 40)])
         img = font.render('Start Simulation', False, (255, 255, 255))
         screen.blit(img, (boardSize[0]*cellSize[0] - 200, 10))
+        
+        img = font.render('Press and hold to create food', False, (255, 255, 255))
+        screen.blit(img, (10, 10))
+
+        img = font.render('Size of the food is the value', False, (255, 255, 255))
+        screen.blit(img, (10, 40))
 
         pygame.display.flip()
 
