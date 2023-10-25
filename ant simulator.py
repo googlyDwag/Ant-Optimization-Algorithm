@@ -12,7 +12,7 @@ font = pygame.font.SysFont(None, 36)
 antNum = 2
 boardSize = np.array([20, 8])
 cellSize = np.array([80, 80])
-headingWeight = 0.7
+headingWeight = 0.8
 pullWeight = 1 - headingWeight
 quitChance = 1
 
@@ -76,8 +76,9 @@ class Board:
     def step(self):
         deltaT = self.deltaT
         for ant in self.ants:
-            ant.varyHeading(deltaT)
-            ant.move()
+            if ant.frozen == False:
+                ant.varyHeading(deltaT)
+                ant.move()
 
     def calculatePathScore(self, ant):
         foodVisitedNp = np.array(ant.foodsVisited)[1:]
@@ -97,8 +98,8 @@ class Board:
         for row in self.board:
             for cell in row:
                 for pheremoneIndex, pheremone in enumerate(cell.pheremones):
-                    pheremone[4] *= 0.3
-                    if pheremone[4] < 10 and pheremone[4] > 0:
+                    pheremone[4] *= 0.8
+                    if pheremone[4] < 5 and pheremone[4] > 0:
                         cell.pheremones.pop(pheremoneIndex)
 
         self.ants = np.concatenate((self.ants, self.frozenAnts))
@@ -120,16 +121,20 @@ class Ant:
         self.cellPos = np.floor(self.position /
                                 self.board.cellSize).astype(int)
         self.cell = board.board[self.cellPos[1]][self.cellPos[0]]
+        self.frozen = False
 
         self.pheremones = []
         self.foodsVisited = [foodSpawn]
 
-        self.headingRandomness = 0.3
+        self.headingRandomness = 0.15
         self.speed = 10
         self.searchDistance = 20
         self.scaledSearch = self.speed*deltaT*self.searchDistance
 
-        self.heading = np.array([random.uniform(-1, 1), random.uniform(-1, 1)])
+        if len(self.cell.pheremones) != 0:
+            self.heading = self.filterlessPheremone()
+        else:
+            self.heading = np.array([random.uniform(-1, 1), random.uniform(-1, 1)])
 
     def foodMovement(self):
         global quitChance
@@ -143,8 +148,7 @@ class Ant:
             self.position[1] = food[1]
             self.foodsVisited.append(food)
             if random.random() < quitChance:
-                self.board.frozenAnts.append(self)
-                self.board.ants.remove(self)
+                self.frozen = True
 
     def print(self):
         print("Position:")
@@ -162,9 +166,25 @@ class Ant:
                 for pheremone in self.board.board[row][column].pheremones:
                     relativePheremonePosition = pheremone[0:2] - self.position
                     dotProduct = np.dot(relativePheremonePosition, self.heading)
-                    if dotProduct > 0 and np.linalg.norm(relativePheremonePosition) < 30:
+                    if dotProduct > 0 and np.linalg.norm(relativePheremonePosition) < 60:
                         pulls.append((relativePheremonePosition)*(pheremone[4]**3))
         pulls.append(self.heading)
+        pulls = np.array(pulls) #Freezing goes br
+
+        return np.mean(pulls, axis=0)
+
+    def filterlessPheremone(self):
+        pulls = []
+        intCellPos = self.cellPos.astype(int)
+        global boardSize
+        
+        for row in range(max(intCellPos[1] - 1, 0), min(intCellPos[1] + 2, boardSize[1])):
+            for column in range(max(intCellPos[0] - 1, 0), min(intCellPos[0] + 2, boardSize[0])):
+                for pheremone in self.board.board[row][column].pheremones:
+                    relativePheremonePosition = pheremone[0:2] - self.position
+                    if np.linalg.norm(relativePheremonePosition) < 60:
+                        if relativePheremonePosition[0] != 0 or relativePheremonePosition[1] != 0:
+                            pulls.append((relativePheremonePosition)*(pheremone[4]**3))
         pulls = np.array(pulls) #Freezing goes br
 
         return np.mean(pulls, axis=0)
@@ -177,11 +197,9 @@ class Ant:
         #pygame.draw.line(self.board.screen, (0, 255, 0), (self.position[0], self.position[1]), (self.position[0] + pull[0], self.position[1] + pull[1]), 4) #Draws pull
         normalize(pull, self.speed*deltaT)
 
-        rotate(self.heading, random.uniform(-deltaT*self.headingRandomness, deltaT*self.headingRandomness))
-
         self.heading = headingWeight*self.heading + pullWeight*pull
 
-
+        rotate(self.heading, random.uniform(-deltaT*self.headingRandomness, deltaT*self.headingRandomness))
 
         normalize(self.heading, self.speed * deltaT)
         nextPosition = np.copy(self.position)
@@ -216,7 +234,7 @@ translucent_surface.fill((0, 0, 0, 150))  # The last value sets the transparency
 
 foodEditing = True
 
-generationLength = 125
+generationLength = 120
 
 screen = pygame.display.set_mode((boardSize[0]*cellSize[0], boardSize[1]*cellSize[1]))
 enlargening = False
@@ -268,7 +286,7 @@ while True:
 
     print(foods)
 
-    alpha = Board(boardSize, cellSize, 2, foods, 1.75, screen)
+    alpha = Board(boardSize, cellSize, 2, foods, 2, screen)
 
     sacrifice = False
 
@@ -294,11 +312,10 @@ while True:
 
             alpha.step()
             pygame.display.flip()
-            pygame.time.Clock().tick(240)
+            pygame.time.Clock().tick(120)
         alpha.endGeneration()
     
     screen.fill((0, 0, 0))
-
 
 
 
